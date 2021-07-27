@@ -6,15 +6,36 @@ import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {PointerLockControls} from 'three/examples/jsm/controls/PointerLockControls.js';
 // import { PointerLockControls } from 'three';
+import * as CANNON from 'cannon-es';
+import { GUI } from 'three/examples/jsm/libs/dat.gui.module';
+import Stats from 'https://unpkg.com/three@0.122.0/examples/jsm/libs/stats.module.js';
 
-let camera, scene, renderer, controls;
+
+let camera, scene, renderer;
 let raycaster;
+let stats;
 
 let moveForward = false;
 let moveBackward = false;
 let moveLeft = false;
 let moveRight = false;
 let canJump = false;
+
+const world = new CANNON.World({
+  gravity: new CANNON.Vec3(0, -9.82, 0), // m/s²
+});
+let controls
+const timeStep = 1 / 60
+let lastCallTime = performance.now()
+let sphereShape
+let sphereBody
+let physicsMaterial
+const balls = []
+const ballMeshes = []
+const boxes = []
+const boxMeshes = []
+
+
 
 let prevTime = performance.now();
 const velocity = new THREE.Vector3();
@@ -31,6 +52,7 @@ function main() {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('black');
+
 
   controls = new PointerLockControls( camera, document.body );
 
@@ -61,6 +83,21 @@ function main() {
   } );
 
   scene.add( controls.getObject() );
+  const normalMaterial = new THREE.MeshNormalMaterial()
+
+  const cubeGeometry = new THREE.BoxGeometry(10, 10, 10);
+  const cubeMesh = new THREE.Mesh(cubeGeometry, normalMaterial);
+  cubeMesh.position.x = 100;
+  cubeMesh.position.y = 3;
+  cubeMesh.castShadow = true;
+  scene.add(cubeMesh);
+  const cubeShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.5, 0.5));
+  const cubeBody = new CANNON.Body({ mass: 1 });
+  cubeBody.addShape(cubeShape);
+  cubeBody.position.x = cubeMesh.position.x;
+  cubeBody.position.y = cubeMesh.position.y;
+  cubeBody.position.z = cubeMesh.position.z;
+  world.addBody(cubeBody);
 
   const onKeyDown = function ( event ) {
 
@@ -236,25 +273,10 @@ function main() {
       const root = gltf.scene;
       root.scale.set(30,30,30);
       root.position.x = 20;
-      root.position.z = 0;
+      root.position.z = 0;   
       scene.add(root);
-
-
-      // // compute the box that contains all the stuff
-      // // from root and below
-      // const box = new THREE.Box3().setFromObject(root);
-
-      // const boxSize = box.getSize(new THREE.Vector3()).length();
-      // const boxCenter = box.getCenter(new THREE.Vector3());
-
-      // // set the camera to frame the box
-      // frameArea(boxSize * 0.5, boxSize, boxCenter, camera);
-
-      // // update the Trackball controls to handle the new size
-      // controls.maxDistance = boxSize * 10;
-      // controls.target.copy(boxCenter);
-      // controls.update();
     });
+
   }
 
   function resizeRendererToDisplaySize(renderer) {
@@ -268,6 +290,15 @@ function main() {
     return needResize;
   }
   document.body.appendChild( renderer.domElement );
+  stats = new Stats()
+  document.body.appendChild(stats.dom)
+  const gui = new GUI();
+  const physicsFolder = gui.addFolder('Physics')
+  physicsFolder.add(world.gravity, 'x', -10.0, 10.0, 0.1)
+  physicsFolder.add(world.gravity, 'y', -10.0, 10.0, 0.1)
+  physicsFolder.add(world.gravity, 'z', -10.0, 10.0, 0.1)
+  physicsFolder.open()
+
   window.addEventListener( 'resize', onWindowResize );
   function onWindowResize() {
 
@@ -286,9 +317,10 @@ function main() {
       camera.updateProjectionMatrix();
     }
 
-    requestAnimationFrame(render);
-
+    requestAnimationFrame(render);   
     const time = performance.now();
+
+  
     if ( controls.isLocked === true ) {
 
       raycaster.ray.origin.copy( controls.getObject().position );
@@ -333,6 +365,13 @@ function main() {
       }
 
     }
+
+    cubeMesh.quaternion.set(
+    cubeBody.quaternion.x,
+    cubeBody.quaternion.y,
+    cubeBody.quaternion.z,
+    cubeBody.quaternion.w
+    )
 
     prevTime = time;
     renderer.render(scene, camera);
